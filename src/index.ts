@@ -3,6 +3,7 @@ import sequelize from './config/database';
 import routerChampionship from './championships/championships.rota';
 import routerGames from './games/games.rota';
 import routerTeams from './teams/teams.rota';
+import './associations';
 
 const app = express();
 
@@ -12,7 +13,7 @@ app.use(routerChampionship);
 app.use(routerGames);
 app.use(routerTeams)
 
-
+// sequelize.sync({ force: true }) // Em produção, remova o "force: true"
 sequelize.sync()
   .then(() => {
     console.log('Banco de dados ok')
