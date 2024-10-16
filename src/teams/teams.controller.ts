@@ -13,10 +13,6 @@ export const getAllTeams = async (req: Request, res: Response): Promise<void> =>
 export const createTeams = async (req: Request, res: Response): Promise<void> => {
   try {
     const teams: Team[] = req.body;
-    if (teams.length != 8) {
-      res.status(500).json({ error: "Necessário 8 times para criar o campeonato" });
-      return;
-    }
 
     for (let team of teams) {
       await Team.create(team);
