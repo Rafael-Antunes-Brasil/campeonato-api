@@ -3,21 +3,21 @@ import sequelize from "../config/database";
 
 interface ChampionshipAttributes {
     id?: number,
-    date?: Date,
+    year?: number,
     name?: string,
 }
 
-interface ChampionshipCreationAttributes extends Optional<ChampionshipAttributes, 'id'> {}
+interface ChampionshipCreationAttributes extends Optional<ChampionshipAttributes, 'id'> { }
 
 class Championship extends Model<ChampionshipAttributes, ChampionshipCreationAttributes> implements ChampionshipAttributes {
     public id?: number;
-    public date?: Date;
+    public year?: number;
     public name?: string;
 }
 
 Championship.init({
-    date: {
-        type: DataTypes.DATE,
+    year: {
+        type: DataTypes.INTEGER,
         allowNull: false
     },
     name: {
@@ -26,7 +26,14 @@ Championship.init({
     }
 }, {
     sequelize,
-    tableName: 'championships'
+    timestamps: false,
+    tableName: 'championships',
+    indexes: [
+        {
+            unique: true,
+            fields: ['name', 'year']
+        }
+    ]
 })
 
 export default Championship;
