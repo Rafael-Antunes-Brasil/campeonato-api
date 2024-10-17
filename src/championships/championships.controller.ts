@@ -11,16 +11,76 @@ interface quarterFinal {
 }
 
 interface teamGame {
-    year_champ: number,
-    name_champ: string,
-    team_name: string,
-    team_id: number
+  year_champ: number,
+  name_champ: string,
+  team_name: string,
+  team_id: number
 }
 
-export const getAllChampionships = async (req: Request, res: Response): Promise<void> => {
+interface championship {
+  champ_name: string,
+  champ_year: number,
+  team_name: string,
+  team_position: number
+}
+
+export const getPreviousChampionships = async (req: Request, res: Response): Promise<void> => {
   try {
-    const championships = await Championship.findAll();
-    res.json(championships);
+    // const championshipId = req.body.championshipId;
+    const championshipId = req.params.championshipId;
+    const championship: championship[] = await sequelize.query(`
+      SELECT
+      c."name" as "champ_name",
+      c."year" as "champ_year",
+      t."name" as "team_name",
+      CASE
+        WHEN tc.position = 0 THEN 'Eliminado nas Quartas'
+        WHEN tc.position = 1 THEN 'Quarto Lugar'
+        WHEN tc.position = 2 THEN 'Terceiro Lugar'
+        WHEN tc.position = 3 THEN 'Segundo Lugar'
+        WHEN tc.position = 4 THEN 'Campeão'
+        ELSE 'Posição desconhecida'
+      END AS "team_position",
+      (((
+        SELECT
+          COALESCE (SUM (g."teamA_goals"), 0)
+        FROM
+          games g
+        WHERE
+          g."teamA_id" = t.id) +
+      (
+        SELECT
+          COALESCE (SUM (g."teamB_goals"), 0)
+        FROM
+          games g
+        WHERE
+          g."teamB_id" = t.id)) 
+      - 
+      ((
+        SELECT
+          COALESCE (SUM (g."teamB_goals"), 0)
+        FROM
+          games g
+        WHERE
+          g."teamA_id" = t.id) +
+      (
+        SELECT
+          COALESCE (SUM (g."teamA_goals"), 0)
+        FROM
+          games g
+        WHERE
+          g."teamB_id" = t.id))) as "pontuação"
+      FROM team_championship tc 
+      LEFT JOIN teams t ON tc.team_id = t.id
+      LEFT JOIN championships c ON c.id = tc.championship_id
+      WHERE championship_id = :championshipId
+      ORDER BY tc.position DESC
+      `, {
+      replacements: { championshipId },
+      type: QueryTypes.SELECT
+    });
+
+    res.status(200).json(championship);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -29,13 +89,14 @@ export const getAllChampionships = async (req: Request, res: Response): Promise<
 export const createChampionship = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, year, teamsIds } = req.body;
-    const championship = await Championship.create({ name, year });
-    const plainChampionship = championship.get({ plain: true });
 
     if (teamsIds.length != 8) {
       res.status(500).json({ error: "Necessário 8 times para criar o campeonato" });
       return;
     }
+
+    const championship = await Championship.create({ name, year });
+    const plainChampionship = championship.get({ plain: true });
 
     const teams = await Team.findAll({
       raw: true,
@@ -43,6 +104,11 @@ export const createChampionship = async (req: Request, res: Response): Promise<v
         id: teamsIds
       }
     });
+
+    if (teams.length != 8) {
+      res.status(500).json({ error: "Ids dos times invalidos, necessário 8 ids validos para criar o campeonato!" });
+      return;
+    }
 
     for (const team of teams) {
       await sequelize.query(`INSERT INTO team_championship (team_id, championship_id) 
@@ -135,30 +201,33 @@ export const switching = async (req: Request, res: Response): Promise<void> => {
           return item.gamePosition == indexB;
         });
 
+        console.log(teamA[0])
+        console.log(teamB[0])
+
         await sequelize.query(`INSERT INTO games 
           ("teamA_id", "teamB_id", championship_id, step, index)
           VALUES (:teamA_id, :teamB_id, :championshipId, :step, :index)`,
-        {
-          replacements: {
-            teamA_id: teamA[0].team_id, 
-            teamB_id: teamB[0].team_id, 
-            championshipId, 
-            step: gamesList[i],
-            index: i
-          }, type: QueryTypes.INSERT
-        });
+          {
+            replacements: {
+              teamA_id: teamA[0].team_id,
+              teamB_id: teamB[0].team_id,
+              championshipId,
+              step: gamesList[i],
+              index: i
+            }, type: QueryTypes.INSERT
+          });
 
-        indexA +=2;
-        indexB +=2;
+        indexA += 2;
+        indexB += 2;
       } else {
         await sequelize.query(`INSERT INTO games 
           (championship_id, step, index)
           VALUES (:championshipId, :step, :index)`,
           {
-            replacements: { 
-              championshipId, 
+            replacements: {
+              championshipId,
               step: gamesList[i],
-              index: i 
+              index: i
             }, type: QueryTypes.INSERT
           })
       }

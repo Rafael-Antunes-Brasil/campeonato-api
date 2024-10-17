@@ -6,7 +6,8 @@ import sequelize from "../config/database";
 interface TeamsChampionshipsAttributes {
     id?: number,
     championship_id?: Championship,
-    team_id?: Team
+    team_id?: Team,
+    position?: number
 }
 
 interface TeamsChampionshipsCreationAttributes extends Optional<TeamsChampionshipsAttributes, 'id'> { }
@@ -15,6 +16,7 @@ class TeamsChampionships extends Model<TeamsChampionshipsAttributes, TeamsChampi
     public id?: number;
     public championship_id?: Championship;
     public team_id?: Team;
+    public position?: number;
 }
 
 TeamsChampionships.init({
@@ -25,6 +27,10 @@ TeamsChampionships.init({
     team_id: {
         type: DataTypes.INTEGER,
         allowNull: false
+    },
+    position: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     }
 }, {
     sequelize,

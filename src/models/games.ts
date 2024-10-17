@@ -66,6 +66,12 @@ Game.init({
     sequelize,
     timestamps: false,
     tableName: 'games',
+    indexes: [
+        {
+            unique: true,
+            fields: ['championship_id', 'index']
+        }
+    ]
 })
 
 export default Game;

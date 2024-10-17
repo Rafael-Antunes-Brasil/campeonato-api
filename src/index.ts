@@ -13,7 +13,6 @@ app.use(routerChampionship);
 app.use(routerGames);
 app.use(routerTeams)
 
-// sequelize.sync({ force: true }) // Em produção, remova o "force: true"
 sequelize.sync()
   .then(() => {
     console.log('Banco de dados ok')

@@ -4,7 +4,7 @@ import Team from '../models/teams';
 export const getAllTeams = async (req: Request, res: Response): Promise<void> => {
   try {
     const teams = await Team.findAll();
-    res.json(teams);
+    res.status(200).json(teams);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }

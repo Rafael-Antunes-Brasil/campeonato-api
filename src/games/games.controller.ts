@@ -3,6 +3,7 @@ import Game from '../models/games';
 import sequelize from '../config/database';
 import { QueryTypes } from 'sequelize';
 import { spawn } from 'child_process';
+import { GamesRepositorio } from './games.repositorio';
 const path = require('path');
 
 interface games {
@@ -17,6 +18,10 @@ interface games {
   goalsB: number,
   champ_name: string,
   champ_year: number
+}
+
+interface goalBalance {
+  score: string
 }
 
 export const getAllGames = async (req: Request, res: Response): Promise<void> => {
@@ -40,6 +45,7 @@ export const createGame = async (req: Request, res: Response): Promise<void> => 
 export const quarterFinals = async (req: Request, res: Response): Promise<void> => {
   try {
     const championshipId = req.body.championshipId;
+    const gameRepository = new GamesRepositorio();
 
     const openGamesQuarter: games[] = await sequelize.query(`
       SELECT 
@@ -100,32 +106,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
       type: QueryTypes.SELECT
     })
 
-    const runPythonScript = (): Promise<number[]> => {
-      return new Promise((resolve, reject) => {
-        const scriptPath = path.resolve(__dirname, '../teste.py');
-        const pythonProcess = spawn('python', [scriptPath]);
-        let scriptOutput = '';
-
-        pythonProcess.stdout.on('data', async (data) => {
-          scriptOutput += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', async (data) => {
-          reject(`Erro no script Python: ${data.toString()}`);
-        });
-
-        pythonProcess.on('close', async (code) => {
-          if (code === 0) {
-            const [valor1, valor2] = scriptOutput.trim().split('\n').map(Number);
-            resolve([valor1, valor2]);
-          } else {
-            reject(`Erro ao finalizar o script Python com código ${code}`);
-          }
-        });
-      });
-    }
-
-    const [goalsTeamA, goalsTeamB] = await runPythonScript();
+    const [goalsTeamA, goalsTeamB] = await gameRepository.runPythonScript();
 
     //Preencher jogo em andamento
     gameInProgress.date_game = new Date();
@@ -147,24 +128,27 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
       type: QueryTypes.UPDATE
     });
 
-    //criar logica para adicionar o semifinalista
     let winningTeam_id: number = 0;
+    let loserTeam_id: number = 0;
 
-    //vencedor
     if (goalsTeamA > goalsTeamB) {
       winningTeam_id = gameInProgress.teamA_id;
+      loserTeam_id = gameInProgress.teamB_id;
     } else if (goalsTeamB > goalsTeamA) {
       winningTeam_id = gameInProgress.teamB_id;
+      loserTeam_id = gameInProgress.teamA_id;
     } else if (goalsTeamA == goalsTeamB) {
       //desempate por penalti nas quartas
       while (true) {
-        const [penaltiesTeamA, penaltiesTeamB] = await runPythonScript();
+        const [penaltiesTeamA, penaltiesTeamB] = await gameRepository.runPythonScript();
 
         if (penaltiesTeamA > penaltiesTeamB) {
           winningTeam_id = gameInProgress.teamA_id;
+          loserTeam_id = gameInProgress.teamB_id;
           break;
         } else if (penaltiesTeamB > penaltiesTeamA) {
           winningTeam_id = gameInProgress.teamB_id;
+          loserTeam_id = gameInProgress.teamA_id;
           break;
         }
       }
@@ -172,7 +156,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
       res.status(500).json('Erro ao gerar resultado!');
     }
 
-    //vencedor passa para a semifinal
+    //Atualizar semifinais
     switch (gameInProgress.index_game) {
       case 0:
         const semiGame1 = openGamesSemi[0];
@@ -216,7 +200,6 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
         });
 
         break;
-
       case 3:
         const semiGame4 = openGamesSemi[1];
         await sequelize.query(`UPDATE games 
@@ -235,7 +218,32 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
         res.status(500).json('Quartas de final inválida!');
         break;
     }
-    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB},\n jogo válido pelas quartas de final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
+
+    await sequelize.query(`UPDATE team_championship tc
+      SET position = 0
+      WHERE championship_id = :championshipId 
+      AND team_id = :teamId
+      `, {
+      replacements: {
+        championshipId,
+        teamId: loserTeam_id
+      },
+      type: QueryTypes.UPDATE
+    });
+
+    await sequelize.query(`UPDATE team_championship tc
+      SET position = 1
+      WHERE championship_id = :championshipId 
+      AND team_id = :teamId
+      `, {
+      replacements: {
+        championshipId,
+        teamId: winningTeam_id
+      },
+      type: QueryTypes.UPDATE
+    });
+
+    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pelas quartas de final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -244,6 +252,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
 export const semiFinals = async (req: Request, res: Response): Promise<void> => {
   try {
     const championshipId = req.body.championshipId;
+    const gameRepository = new GamesRepositorio();
 
     const openGamesSemi: games[] = await sequelize.query(`
       SELECT 
@@ -278,33 +287,7 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
     }
 
     const gameInProgress = openGamesSemi[0];
-
-    const runPythonScript = (): Promise<number[]> => {
-      return new Promise((resolve, reject) => {
-        const scriptPath = path.resolve(__dirname, '../teste.py');
-        const pythonProcess = spawn('python', [scriptPath]);
-        let scriptOutput = '';
-
-        pythonProcess.stdout.on('data', async (data) => {
-          scriptOutput += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', async (data) => {
-          reject(`Erro no script Python: ${data.toString()}`);
-        });
-
-        pythonProcess.on('close', async (code) => {
-          if (code === 0) {
-            const [valor1, valor2] = scriptOutput.trim().split('\n').map(Number);
-            resolve([valor1, valor2]);
-          } else {
-            reject(`Erro ao finalizar o script Python com código ${code}`);
-          }
-        });
-      });
-    }
-
-    const [goalsTeamA, goalsTeamB] = await runPythonScript();
+    const [goalsTeamA, goalsTeamB] = await gameRepository.runPythonScript();
 
     //Preencher jogo em andamento
     gameInProgress.date_game = new Date();
@@ -326,42 +309,48 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
       type: QueryTypes.UPDATE
     });
 
-    //criar logica para adicionar o terceiro e finalista
+    //terceiros e finalistas
     let winningTeam_id: number = 0;
-    let teamLoser_id: number = 0;
+    let loserTeam_id: number = 0;
 
-    //vencedor
     if (goalsTeamA > goalsTeamB) {
       winningTeam_id = gameInProgress.teamA_id;
-      teamLoser_id = gameInProgress.teamB_id;
+      loserTeam_id = gameInProgress.teamB_id;
     } else if (goalsTeamB > goalsTeamA) {
       winningTeam_id = gameInProgress.teamB_id;
-      teamLoser_id = gameInProgress.teamA_id;
+      loserTeam_id = gameInProgress.teamA_id;
     } else if (goalsTeamA == goalsTeamB) {
-      //criar desempate de acordo com o pedido no chamado
+      const resTeamA: goalBalance = await gameRepository.goalBalanceQuery(gameInProgress.teamA_id, championshipId)
+      const resTeamB: goalBalance = await gameRepository.goalBalanceQuery(gameInProgress.teamB_id, championshipId)
 
+      if (+resTeamA.score > +resTeamB.score) {
+        winningTeam_id = gameInProgress.teamA_id;
+        loserTeam_id = gameInProgress.teamB_id;
+      } else if (+resTeamB.score > +resTeamA.score) {
+        winningTeam_id = gameInProgress.teamB_id;
+        loserTeam_id = gameInProgress.teamA_id;
+      } else if (+resTeamA.score == +resTeamB.score) {
+        while (true) {
+          const [penaltiesTeamA, penaltiesTeamB] = await gameRepository.runPythonScript();
 
-      //desempate por penalti na semi
-      while (true) {
-        const [penaltiesTeamA, penaltiesTeamB] = await runPythonScript();
-
-        if (penaltiesTeamA > penaltiesTeamB) {
-          winningTeam_id = gameInProgress.teamA_id;
-          teamLoser_id = gameInProgress.teamB_id;
-          break;
-        } else if (penaltiesTeamB > penaltiesTeamA) {
-          winningTeam_id = gameInProgress.teamB_id;
-          teamLoser_id = gameInProgress.teamA_id;
-          break;
+          if (penaltiesTeamA > penaltiesTeamB) {
+            winningTeam_id = gameInProgress.teamA_id;
+            loserTeam_id = gameInProgress.teamB_id;
+            break;
+          } else if (penaltiesTeamB > penaltiesTeamA) {
+            winningTeam_id = gameInProgress.teamB_id;
+            loserTeam_id = gameInProgress.teamA_id;
+            break;
+          }
         }
       }
     } else {
       res.status(500).json('Erro ao gerar resultado!');
     }
 
+    //Atualiza final e terceiro lugar
     switch (gameInProgress.index_game) {
       case 4:
-        //Final 7
         await sequelize.query(`UPDATE games 
           SET "teamA_id" = :teamA_id
           WHERE index = 7
@@ -372,20 +361,18 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
           type: QueryTypes.UPDATE
         });
 
-        //Terceiro Lugar 6
         await sequelize.query(`UPDATE games 
           SET "teamA_id" = :teamA_id
           WHERE index = 6
           `, {
           replacements: {
-            teamA_id: teamLoser_id
+            teamA_id: loserTeam_id
           },
           type: QueryTypes.UPDATE
         });
 
         break;
       case 5:
-        //Final
         await sequelize.query(`UPDATE games 
           SET "teamB_id" = :teamB_id
           WHERE index = 7
@@ -396,13 +383,12 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
           type: QueryTypes.UPDATE
         });
 
-        //Terceiro Lugar
         await sequelize.query(`UPDATE games 
           SET "teamB_id" = :teamB_id
           WHERE index = 6
           `, {
           replacements: {
-            teamB_id: teamLoser_id
+            teamB_id: loserTeam_id
           },
           type: QueryTypes.UPDATE
         });
@@ -413,7 +399,19 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
         break;
     }
 
-    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB},\n jogo válido pela semi final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
+    await sequelize.query(`UPDATE team_championship tc
+      SET position = 3
+      WHERE championship_id = :championshipId 
+      AND team_id = :teamId
+      `, {
+      replacements: {
+        championshipId,
+        teamId: winningTeam_id
+      },
+      type: QueryTypes.UPDATE
+    });
+
+    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pela semi final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -456,33 +454,8 @@ export const thirdPlaceGame = async (req: Request, res: Response): Promise<void>
     }
 
     const gameInProgress = openGamesThird[0];
-
-    const runPythonScript = (): Promise<number[]> => {
-      return new Promise((resolve, reject) => {
-        const scriptPath = path.resolve(__dirname, '../teste.py');
-        const pythonProcess = spawn('python', [scriptPath]);
-        let scriptOutput = '';
-
-        pythonProcess.stdout.on('data', async (data) => {
-          scriptOutput += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', async (data) => {
-          reject(`Erro no script Python: ${data.toString()}`);
-        });
-
-        pythonProcess.on('close', async (code) => {
-          if (code === 0) {
-            const [valor1, valor2] = scriptOutput.trim().split('\n').map(Number);
-            resolve([valor1, valor2]);
-          } else {
-            reject(`Erro ao finalizar o script Python com código ${code}`);
-          }
-        });
-      });
-    }
-
-    const [goalsTeamA, goalsTeamB] = await runPythonScript();
+    const gameRepository = new GamesRepositorio();
+    const [goalsTeamA, goalsTeamB] = await gameRepository.runPythonScript();
 
     //Preencher jogo em andamento
     gameInProgress.date_game = new Date();
@@ -504,38 +477,51 @@ export const thirdPlaceGame = async (req: Request, res: Response): Promise<void>
       type: QueryTypes.UPDATE
     });
 
-    //criar logica para adicionar o semifinalista
     let winningTeam_id: number = 0;
 
-    //vencedor
     if (goalsTeamA > goalsTeamB) {
       winningTeam_id = gameInProgress.teamA_id;
     } else if (goalsTeamB > goalsTeamA) {
       winningTeam_id = gameInProgress.teamB_id;
     } else if (goalsTeamA == goalsTeamB) {
-      //criar desempate de acordo com o pedido no chamado
+      const resTeamA: goalBalance = await gameRepository.goalBalanceQuery(gameInProgress.teamA_id, championshipId)
+      const resTeamB: goalBalance = await gameRepository.goalBalanceQuery(gameInProgress.teamB_id, championshipId)
 
+      if (+resTeamA.score > +resTeamB.score) {
+        winningTeam_id = gameInProgress.teamA_id;
+      } else if (+resTeamB.score > +resTeamA.score) {
+        winningTeam_id = gameInProgress.teamB_id;
+      } else if (+resTeamA.score == +resTeamB.score) {
+        while (true) {
+          const [penaltiesTeamA, penaltiesTeamB] = await gameRepository.runPythonScript();
 
-      //desempate por penalti na semi
-      while (true) {
-        const [penaltiesTeamA, penaltiesTeamB] = await runPythonScript();
-
-        if (penaltiesTeamA > penaltiesTeamB) {
-          winningTeam_id = gameInProgress.teamA_id;
-          break;
-        } else if (penaltiesTeamB > penaltiesTeamA) {
-          winningTeam_id = gameInProgress.teamB_id;
-          break;
+          if (penaltiesTeamA > penaltiesTeamB) {
+            winningTeam_id = gameInProgress.teamA_id;
+            break;
+          } else if (penaltiesTeamB > penaltiesTeamA) {
+            winningTeam_id = gameInProgress.teamB_id;
+            break;
+          }
         }
       }
     } else {
       res.status(500).json('Erro ao gerar resultado!');
     }
 
+    //Vencedor
+    await sequelize.query(`UPDATE team_championship tc
+      SET position = 2
+      WHERE championship_id = :championshipId 
+      AND team_id = :teamId
+      `, {
+      replacements: {
+        championshipId,
+        teamId: winningTeam_id
+      },
+      type: QueryTypes.UPDATE
+    });
 
-
-
-    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB},\n jogo válido pelo terceiro lugar no campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
+    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pelo terceiro lugar no campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -544,6 +530,7 @@ export const thirdPlaceGame = async (req: Request, res: Response): Promise<void>
 export const grandFinalGame = async (req: Request, res: Response): Promise<void> => {
   try {
     const championshipId = req.body.championshipId;
+    const gameRepository = new GamesRepositorio();
 
     const openGamesFinal: games[] = await sequelize.query(`
       SELECT 
@@ -579,32 +566,7 @@ export const grandFinalGame = async (req: Request, res: Response): Promise<void>
 
     const gameInProgress = openGamesFinal[0];
 
-    const runPythonScript = (): Promise<number[]> => {
-      return new Promise((resolve, reject) => {
-        const scriptPath = path.resolve(__dirname, '../teste.py');
-        const pythonProcess = spawn('python', [scriptPath]);
-        let scriptOutput = '';
-
-        pythonProcess.stdout.on('data', async (data) => {
-          scriptOutput += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', async (data) => {
-          reject(`Erro no script Python: ${data.toString()}`);
-        });
-
-        pythonProcess.on('close', async (code) => {
-          if (code === 0) {
-            const [valor1, valor2] = scriptOutput.trim().split('\n').map(Number);
-            resolve([valor1, valor2]);
-          } else {
-            reject(`Erro ao finalizar o script Python com código ${code}`);
-          }
-        });
-      });
-    }
-
-    const [goalsTeamA, goalsTeamB] = await runPythonScript();
+    const [goalsTeamA, goalsTeamB] = await gameRepository.runPythonScript();
 
     //Preencher jogo em andamento
     gameInProgress.date_game = new Date();
@@ -626,7 +588,6 @@ export const grandFinalGame = async (req: Request, res: Response): Promise<void>
       type: QueryTypes.UPDATE
     });
 
-    //criar logica para adicionar o semifinalista
     let winningTeam_id: number = 0;
 
     //vencedor
@@ -635,26 +596,46 @@ export const grandFinalGame = async (req: Request, res: Response): Promise<void>
     } else if (goalsTeamB > goalsTeamA) {
       winningTeam_id = gameInProgress.teamB_id;
     } else if (goalsTeamA == goalsTeamB) {
-      //criar desempate de acordo com o pedido no chamado
+      
+      const resTeamA: goalBalance = await gameRepository.goalBalanceQuery(gameInProgress.teamA_id, championshipId)
+      const resTeamB: goalBalance = await gameRepository.goalBalanceQuery(gameInProgress.teamB_id, championshipId)
 
+      if (+resTeamA.score > +resTeamB.score) {
+        winningTeam_id = gameInProgress.teamA_id;
+      } else if (+resTeamB.score > +resTeamA.score) {
+        winningTeam_id = gameInProgress.teamB_id;
+      } else if (+resTeamA.score == +resTeamB.score) {
+        while (true) {
+          const [penaltiesTeamA, penaltiesTeamB] = await gameRepository.runPythonScript();
 
-      //desempate por penalti na semi
-      while (true) {
-        const [penaltiesTeamA, penaltiesTeamB] = await runPythonScript();
-
-        if (penaltiesTeamA > penaltiesTeamB) {
-          winningTeam_id = gameInProgress.teamA_id;
-          break;
-        } else if (penaltiesTeamB > penaltiesTeamA) {
-          winningTeam_id = gameInProgress.teamB_id;
-          break;
+          if (penaltiesTeamA > penaltiesTeamB) {
+            winningTeam_id = gameInProgress.teamA_id;
+            break;
+          } else if (penaltiesTeamB > penaltiesTeamA) {
+            winningTeam_id = gameInProgress.teamB_id;
+            break;
+          }
         }
       }
+
     } else {
       res.status(500).json('Erro ao gerar resultado!');
     }
 
-    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB},\n jogo válido pela final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
+    //Vencedor
+    await sequelize.query(`UPDATE team_championship tc
+      SET position = 4
+      WHERE championship_id = :championshipId 
+      AND team_id = :teamId
+      `, {
+      replacements: {
+        championshipId,
+        teamId: winningTeam_id
+      },
+      type: QueryTypes.UPDATE
+    });
+
+    res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pela final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
