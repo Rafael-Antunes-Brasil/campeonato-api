@@ -1,16 +1,16 @@
 import { Request, Response } from 'express';
 import Team from '../models/teams';
 
-export const getAllTeams = async (req: Request, res: Response): Promise<void> => {
+export const allTeams = async (req: Request, res: Response): Promise<void> => {
   try {
     const teams = await Team.findAll();
     res.status(200).json(teams);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
-export const createTeams = async (req: Request, res: Response): Promise<void> => {
+export const teams = async (req: Request, res: Response): Promise<void> => {
   try {
     const teams: Team[] = req.body;
 
@@ -20,6 +20,6 @@ export const createTeams = async (req: Request, res: Response): Promise<void> =>
 
     res.status(201).json(teams);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }

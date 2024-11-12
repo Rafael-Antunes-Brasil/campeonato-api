@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import Game from '../models/games';
 import sequelize from '../config/database';
 import { QueryTypes } from 'sequelize';
-import { spawn } from 'child_process';
 import { GamesRepositorio } from './games.repositorio';
 const path = require('path');
 
@@ -24,21 +23,21 @@ interface goalBalance {
   score: string
 }
 
-export const getAllGames = async (req: Request, res: Response): Promise<void> => {
+export const allGames = async (req: Request, res: Response): Promise<void> => {
   try {
     const games = await Game.findAll();
     res.json(games);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
-export const createGame = async (req: Request, res: Response): Promise<void> => {
+export const game = async (req: Request, res: Response): Promise<void> => {
   try {
     const game = await Game.create(req.body);
     res.status(201).json(game);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
@@ -75,7 +74,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
     })
 
     if (openGamesQuarter.length == 0) {
-      res.status(500).json({ error: "Jogos das quartas de final já gerados!" });
+      res.status(400).json({ error: "Jogos das quartas de final já gerados!" });
       return;
     }
 
@@ -153,7 +152,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
         }
       }
     } else {
-      res.status(500).json('Erro ao gerar resultado!');
+      res.status(400).json('Erro ao gerar resultado!');
     }
 
     //Atualizar semifinais
@@ -215,7 +214,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
 
         break;
       default:
-        res.status(500).json('Quartas de final inválida!');
+        res.status(400).json('Quartas de final inválida!');
         break;
     }
 
@@ -245,7 +244,7 @@ export const quarterFinals = async (req: Request, res: Response): Promise<void> 
 
     res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pelas quartas de final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
@@ -282,7 +281,7 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
     });
 
     if (openGamesSemi.length == 0) {
-      res.status(500).json({ error: "Jogos das semi finais já gerados!" });
+      res.status(400).json({ error: "Jogos das semi finais já gerados!" });
       return;
     }
 
@@ -345,7 +344,7 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
         }
       }
     } else {
-      res.status(500).json('Erro ao gerar resultado!');
+      res.status(400).json('Erro ao gerar resultado!');
     }
 
     //Atualiza final e terceiro lugar
@@ -395,7 +394,7 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
 
         break;
       default:
-        res.status(500).json('Quartas de final inválida!');
+        res.status(400).json('Quartas de final inválida!');
         break;
     }
 
@@ -413,7 +412,7 @@ export const semiFinals = async (req: Request, res: Response): Promise<void> => 
 
     res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pela semi final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
@@ -449,7 +448,7 @@ export const thirdPlaceGame = async (req: Request, res: Response): Promise<void>
     });
 
     if (openGamesThird.length == 0) {
-      res.status(500).json({ error: "Jogo do terceiro lugar já gerado!" });
+      res.status(400).json({ error: "Jogo do terceiro lugar já gerado!" });
       return;
     }
 
@@ -505,7 +504,7 @@ export const thirdPlaceGame = async (req: Request, res: Response): Promise<void>
         }
       }
     } else {
-      res.status(500).json('Erro ao gerar resultado!');
+      res.status(400).json('Erro ao gerar resultado!');
     }
 
     //Vencedor
@@ -523,7 +522,7 @@ export const thirdPlaceGame = async (req: Request, res: Response): Promise<void>
 
     res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pelo terceiro lugar no campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
@@ -560,7 +559,7 @@ export const grandFinalGame = async (req: Request, res: Response): Promise<void>
     });
 
     if (openGamesFinal.length == 0) {
-      res.status(500).json({ error: "Final da gerada!" });
+      res.status(400).json({ error: "Final da gerada!" });
       return;
     }
 
@@ -619,7 +618,7 @@ export const grandFinalGame = async (req: Request, res: Response): Promise<void>
       }
 
     } else {
-      res.status(500).json('Erro ao gerar resultado!');
+      res.status(400).json('Erro ao gerar resultado!');
     }
 
     //Vencedor
@@ -637,6 +636,6 @@ export const grandFinalGame = async (req: Request, res: Response): Promise<void>
 
     res.status(201).json(`Resultado entre ${gameInProgress.teamAName}: ${gameInProgress.goalsA} X ${gameInProgress.teamBName}: ${gameInProgress.goalsB}, jogo válido pela final do campeonato ${gameInProgress.champ_name} ${gameInProgress.champ_year}`);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }

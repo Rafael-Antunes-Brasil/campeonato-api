@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import Championship from '../models/championships';
 import Team from '../models/teams';
-import TeamsChampionships from '../models/teams-championships';
 import sequelize from '../config/database';
 import { QueryTypes } from 'sequelize';
 
@@ -24,9 +23,8 @@ interface championship {
   team_position: number
 }
 
-export const getPreviousChampionships = async (req: Request, res: Response): Promise<void> => {
+export const previousChampionships = async (req: Request, res: Response): Promise<void> => {
   try {
-    // const championshipId = req.body.championshipId;
     const championshipId = req.params.championshipId;
     const championship: championship[] = await sequelize.query(`
       SELECT
@@ -82,16 +80,16 @@ export const getPreviousChampionships = async (req: Request, res: Response): Pro
 
     res.status(200).json(championship);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    res.status(400).json({ error: (error as Error).message });
   }
 }
 
-export const createChampionship = async (req: Request, res: Response): Promise<void> => {
+export const championship = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, year, teamsIds } = req.body;
 
     if (teamsIds.length != 8) {
-      res.status(500).json({ error: "Necessário 8 times para criar o campeonato" });
+      res.status(400).json({ error: "Necessário 8 times para criar o campeonato" });
       return;
     }
 
@@ -106,7 +104,7 @@ export const createChampionship = async (req: Request, res: Response): Promise<v
     });
 
     if (teams.length != 8) {
-      res.status(500).json({ error: "Ids dos times invalidos, necessário 8 ids validos para criar o campeonato!" });
+      res.status(400).json({ error: "Ids dos times invalidos, necessário 8 ids validos para criar o campeonato!" });
       return;
     }
 
@@ -127,7 +125,7 @@ export const createChampionship = async (req: Request, res: Response): Promise<v
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
+    res.status(400).json({
       message: 'Erro ao criar o campeonato',
       error: error
     });
@@ -147,7 +145,7 @@ export const switching = async (req: Request, res: Response): Promise<void> => {
     )
 
     if (gamesFromChampionship.length > 0) {
-      res.status(500).json({ error: "Chaveamento do campeonato ja gerado!" });
+      res.status(400).json({ error: "Chaveamento do campeonato ja gerado!" });
       return;
     }
 
@@ -239,7 +237,7 @@ export const switching = async (req: Request, res: Response): Promise<void> => {
 
   } catch (error) {
     console.log(error)
-    res.status(500).json({
+    res.status(400).json({
       message: 'Erro ao gerar chaveamento',
       error: error
     });

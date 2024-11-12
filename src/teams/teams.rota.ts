@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { createTeams, getAllTeams } from './teams.controller';
+import { teams, allTeams } from './teams.controller';
 
 const routerTeams = Router();
 
-routerTeams.post('/new-teams', createTeams);
-routerTeams.get('/previous-teams', getAllTeams);
+routerTeams.post('/teams', teams);
+routerTeams.get('/previous-teams', allTeams);
 
 export default routerTeams;
